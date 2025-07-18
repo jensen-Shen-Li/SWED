@@ -52,9 +52,10 @@ def get_config(
 
     num_mins_to_use = get_probabilistic_num_min(variant['trainer_kwargs']['q_samples'])
     # sample_idxs = np.random.choice(num_qs, num_mins_to_use, replace=False)
-
-    sample_idxs = next(circular_sliding_window(num_qs, num_mins_to_use))
-
+    win_step = variant['win_step']
+    sample_idxs = np.arange(num_mins_to_use)
+    # print(type(sample_idxs))
+    # exit()
     all_nums = np.arange(num_qs)
     rest_idx = np.setdiff1d(all_nums, sample_idxs)
 
@@ -63,6 +64,7 @@ def get_config(
         ParallelizedEnsembleFlattenMLP,
         ensemble_size=num_qs,
         ensemble_idx=sample_idxs,
+        win_step=win_step,
         hidden_sizes=[M] * num_q_layers,
         input_size=obs_dim + action_dim,
         output_size=1,

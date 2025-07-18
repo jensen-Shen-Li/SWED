@@ -42,7 +42,13 @@ To reproduce EDAC results for MuJoCo Gym, run:
 ```bash
 python -m scripts.sac --env_name [ENVIRONMENT] --num_qs [N] --eta [ETA]
 ```
-python -m scripts.sac --env_name halfcheetah-medium-v2 --num_qs 6 --q_samples 4 --eta 1.0
+python -m scripts.sac --env_name halfcheetah-medium-v2 --num_qs 6 --q_samples 4 --win_step 2 --eta 1.0
+python -m scripts.sac --env_name halfcheetah-medium-v2 --num_qs 10 --q_samples 6 --win_step 4 --eta 1.0
+python -m scripts.sac --env_name halfcheetah-medium-replay-v2 --num_qs 10 --q_samples 6 --win_step 4 --eta 1.0
+python -m scripts.sac --env_name halfcheetah-medium-expert-v2 --num_qs 10 --q_samples 6 --win_step 4 --eta 5.0
+python -m scripts.sac --env_name hopper-medium-v2 --num_qs 10 --q_samples 6 --eta 1.0
+
+python -m scripts.sac --env_name hopper-medium-v2 --num_qs 40 --q_samples 32 --win_step 16 --eta 1.0
 ### Adroit
 
 On Adroit tasks, we apply reward normalization for further training stability. For example, to reproduce the EDAC results for pen-human, run:

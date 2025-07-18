@@ -6,6 +6,7 @@ from torch.nn import functional as F
 from lifelong_rl.torch import pytorch_util as ptu
 from lifelong_rl.torch.modules import LayerNorm
 
+import copy
 
 def identity(x):
     return x
@@ -307,6 +308,7 @@ class ParallelizedEnsembleFlattenMLP(nn.Module):
             self,
             ensemble_size,
             ensemble_idx,
+            win_step,
             hidden_sizes,
             input_size,
             output_size,
@@ -321,7 +323,7 @@ class ParallelizedEnsembleFlattenMLP(nn.Module):
         super().__init__()
 
         self.ensemble_size = ensemble_size
-        self.ensemble_idx = ensemble_idx
+        # self.num_mins_to_use = num_mins_to_use
         self.input_size = input_size
         self.output_size = output_size
         self.elites = [i for i in range(self.ensemble_size)]
@@ -334,7 +336,13 @@ class ParallelizedEnsembleFlattenMLP(nn.Module):
         self.layer_norm = layer_norm
 
         self.fcs = []
+        self.it = 0
+        self.count_list = []
+        self.window = ensemble_idx
+        self.win_step = win_step
 
+        # print(next(self.window))
+        # exit()
         if batch_norm:
             raise NotImplementedError
 
@@ -367,7 +375,10 @@ class ParallelizedEnsembleFlattenMLP(nn.Module):
 
     def forward(self, *inputs, **kwargs):
         flat_inputs = torch.cat(inputs, dim=-1)
-
+        slide_updata = kwargs.get('slide_upd', None)
+        slide = kwargs.get('slide', None)
+        
+        
         state_dim = inputs[0].shape[-1]
         
         dim=len(flat_inputs.shape)
@@ -400,28 +411,76 @@ class ParallelizedEnsembleFlattenMLP(nn.Module):
         # return output
 
         q_samples_list = []
-        if len(self.ensemble_idx) > 0:
-            for sample_idx in self.ensemble_idx:
-                q_value_samples =  output[sample_idx]
-                q_samples_list.append(q_value_samples)
-            q_samples_list = torch.stack(q_samples_list)
-            # print("111",self.ensemble_idx)
-            return q_samples_list, self.ensemble_idx
+        # window = next(self.window)
+
+        for sample_idx in self.window:
+            q_value_samples =  output[sample_idx]
+            q_samples_list.append(q_value_samples)
+        q_samples_list = torch.stack(q_samples_list)
+        # print("111",self.ensemble_idx)
+        window = copy.deepcopy(self.window)
+        # print("window", window)
+        if slide == 'back':
+            # print('back')
+            self.window = self.updata_window(self.window, self.ensemble_size, self.win_step)
+            # print("self.window", self.window)
+        if slide_updata:
+            self.window = self.updata_window(self.window, self.ensemble_size, self.win_step)
+            # print(self.window)
+            # exit()
+        return q_samples_list, window
 
 
-    def sample(self, *inputs):
-
-        preds, ensemble_idx = self.forward(*inputs)
+    def sample(self, *inputs, slide=None):
+        # self.it+=1
+        
+        if slide == 'back':
+            slide_upd = True
+        else:
+            slide_upd = False
+        preds, ensemble_idx = self.forward(*inputs, slide_upd=None, slide=slide)
         # print("111",ensemble_idx[:2])
         # print(preds[:2].shape)
         # exit()
         # print("torch.min(preds[-2:], dim=0)",torch.mean(torch.min(preds[-2:], dim=0)[0]))
         # print("torch.min(preds[-2:], dim=0)",torch.mean(torch.max(preds[-2:], dim=0)[0]))
-        sli = len(ensemble_idx) * 2 - self.ensemble_size
-        # print("sli", sli)
-        # exit()
-        return torch.min(preds[-sli:], dim=0)[0]
-        # return torch.min(preds[:2], dim=0)[0]
+        sli_f = len(ensemble_idx) - self.win_step
+        sli_b = self.win_step
+        # print("sli_f", sli_f)
+        # print("sli_b", sli_b)
+        # slib = len(ensemble_idx) - sli
+        # # print("sli", -sli)
+        # A = torch.min(preds[-sli:], dim=0)[0]
+        # B = torch.max(preds[:slib], dim=0)[0]
+        # count = (A > B).sum().item()
+        # self.count_list.append(count)
+        # # exit()
+        # # print("count", count)
+        # if self.it %1000==0:
+        #     print("self.count_list", self.count_list)
+        #     self.count_list = []
+        # if slide == 'front':
+        #     return torch.min(preds[:sli_f], dim=0)[0]
+        # elif slide == 'back':
+        #     return torch.min(preds[-sli_b:], dim=0)[0]
+        # else:
+        #     raise NotImplementedError
+        # # return torch.min(preds[:2], dim=0)[0]
+        return torch.min(preds[-sli_b:], dim=0)[0]
 
     def fit_input_stats(self, data, mask=None):
         raise NotImplementedError
+    
+
+    def circular_sliding_window(self, x: int, num: int):
+        data = np.arange(x)
+        step = x + 1 - num
+        start = 0
+        while True:
+            indices = [(start + i) % x for i in range(num)]
+            yield data[indices]
+            start = (start + step) % x
+
+    def updata_window(self, window, length, step):
+        new_window = (window + step) % length
+        return new_window

@@ -10,6 +10,7 @@ from lifelong_rl.torch.distributions import TanhNormal
 from lifelong_rl.util.eval_util import create_stats_ordered_dict
 from lifelong_rl.core.rl_algorithms.torch_rl_algorithm import TorchTrainer
 from lifelong_rl.torch.pytorch_util import np_to_pytorch_batch
+from typing import List
 
 # from torch_batch_svd import svd
 
@@ -65,6 +66,7 @@ class SACTrainer(TorchTrainer):
         self.eta = eta
 
         self.replay_buffer = replay_buffer
+        self.slide = False
 
         self.use_automatic_entropy_tuning = use_automatic_entropy_tuning
         if self.use_automatic_entropy_tuning:
@@ -124,6 +126,7 @@ class SACTrainer(TorchTrainer):
         actions = batch['actions']
         rewards = batch['rewards']
         terminals = batch['terminals']
+        self.slide = True
         
         if self.eta > 0:
             actions.requires_grad_(True)
@@ -145,8 +148,8 @@ class SACTrainer(TorchTrainer):
         else:
             alpha_loss = 0
             alpha = 1
-
-        q_new_actions = self.qfs.sample(obs, new_obs_actions)
+        # print("window1")
+        q_new_actions = self.qfs.sample(obs, new_obs_actions, slide='front')
 
         policy_loss = (alpha * log_pi - q_new_actions).mean()
 
@@ -164,6 +167,8 @@ class SACTrainer(TorchTrainer):
         QF Loss
         """
         # (num_qs, batch_size, output_size)
+        # print("window2")
+
         qs_pred, _ = self.qfs(obs, actions)
 
         new_next_actions, _, _, new_log_pi, *_ = self.policy(
@@ -173,11 +178,15 @@ class SACTrainer(TorchTrainer):
         )
 
         if not self.max_q_backup:
-            target_q_values = self.target_qfs.sample(next_obs, new_next_actions)
+            # print("window3")
+
+            target_q_values = self.target_qfs.sample(next_obs, new_next_actions, slide='back')
             if not self.deterministic_backup:
                 target_q_values -= alpha * new_log_pi
         else:
             # if self.max_q_backup
+            # print("window4")
+
             next_actions_temp, _ = self._get_policy_actions(
                 next_obs, num_actions=10, network=self.policy)
             target_q_values = self._get_tensor_values(
@@ -195,7 +204,9 @@ class SACTrainer(TorchTrainer):
         if self.eta > 0:
             obs_tile = obs.unsqueeze(0).repeat(self.num_qs, 1, 1)
             actions_tile = actions.unsqueeze(0).repeat(self.num_qs, 1, 1).requires_grad_(True)
-            qs_preds_tile, sample_idx = self.qfs(obs_tile, actions_tile)
+            # print("window5")
+
+            qs_preds_tile, sample_idx = self.qfs(obs_tile, actions_tile, slide_upd=True)
             idx = torch.tensor(sample_idx, device=ptu.device)
 
             # print(sample_idx)
@@ -228,8 +239,8 @@ class SACTrainer(TorchTrainer):
             # print(grad_loss.shape)
             qs_pred_grads = qs_pred_grads.transpose(0, 1)
             qs_pred_grads = torch.einsum('bik,bjk->bij', qs_pred_grads, qs_pred_grads)
-
-            masks = self.create_tensor_mask(self.num_qs, sample_idx[0]).to(device=ptu.device)
+            # print(sample_idx)
+            masks = self.create_tensor_mask(self.num_qs, sample_idx).to(device=ptu.device)
             # print(masks)
             # exit()
             masks = masks.unsqueeze(dim=0).repeat(qs_pred_grads.size(0), 1, 1)
@@ -406,24 +417,43 @@ class SACTrainer(TorchTrainer):
     def end_epoch(self, epoch):
         self._need_to_update_eval_statistics = True
 
-    def create_tensor_mask(self, num: int, x: int) -> torch.Tensor:
-        slide_w = self.q_samples * 2 - num
-        # print(slide_w)
-        # exit()
-        mat = torch.zeros((num, num))
-        indices = list(range(x, x + slide_w))
+    def create_tensor_mask(self, num: int, indices: List[int]) -> torch.Tensor:
+        """
+        根据当前滑动窗口 indices 生成一个 num x num 的 mask 矩阵。
 
+        参数:
+            num (int): Q-ensemble 的总数
+            indices (List[int]): 当前滑动窗口的索引，如 [0, 1, 2]
+
+        返回:
+            mask (torch.Tensor): [num x num]，在 indices 中两两组合 (i ≠ j) 的位置设置为 1
+        """
+        mat = torch.zeros((num, num))
         for i in indices:
             for j in indices:
                 if i != j:
-                    mat[i][j] = 1
+                    mat[i][j] = 1.0
+        return mat
+
+
+    # def create_tensor_mask(self, num: int, x: int) -> torch.Tensor:
+    #     slide_w = x
+    #     # print(slide_w)
+    #     # exit()
+    #     mat = torch.zeros((num, num))
+    #     indices = list(range(x, x + slide_w))
+
+    #     for i in indices:
+    #         for j in indices:
+    #             if i != j:
+    #                 mat[i][j] = 1
         
 
-        # if x + slide_w - 1 < num:  # 防止越界
-        #     mat[x, x + 1] = 1.0
-        #     mat[x + 1, x] = 1.0
+    #     # if x + slide_w - 1 < num:  # 防止越界
+    #     #     mat[x, x + 1] = 1.0
+    #     #     mat[x + 1, x] = 1.0
 
-        return mat
+    #     return mat
     
     def pearson_corr(self, x, y):
         """

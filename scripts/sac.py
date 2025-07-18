@@ -69,6 +69,7 @@ def main(args):
     # EDAC
     variant['trainer_kwargs']['eta'] = args.eta
     variant['trainer_kwargs']['q_samples'] = args.q_samples
+    variant['win_step'] = args.win_step
 
     # experiment name
     experiment_kwargs['exp_postfix'] = ''
@@ -131,6 +132,10 @@ if __name__ == '__main__':
                         default=4,
                         type=int,
                         help='number of Q-functions to be sampled')
+    parser.add_argument("--win_step",
+                        default=2,
+                        type=int,
+                        help='number of step for window moving')
     parser.add_argument('--max_q_backup',
                         action='store_true',
                         help='use max q backup')
