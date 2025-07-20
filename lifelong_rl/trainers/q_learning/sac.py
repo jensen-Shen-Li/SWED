@@ -244,12 +244,13 @@ class SACTrainer(TorchTrainer):
             # print(masks)
             # exit()
             masks = masks.unsqueeze(dim=0).repeat(qs_pred_grads.size(0), 1, 1)
-            # print(masks[0])
+            # print(masks)
             # e_num = torch.eye(self.num_qs, device=ptu.device)
             # e_num[:, remaining] = 1
             # masks = e_num.unsqueeze(dim=0).repeat(qs_pred_grads.size(0), 1, 1)
+            # print(1-masks)
             # print(masks.shape)
-            # print(qs_pred_grads.shape)
+            # # print(qs_pred_grads.shape)
             # exit()
             # per_loss_2_0 = self.pearson_corr(ve_3, ve_1)  # shape [B]
             # per_loss_2_1 = self.pearson_corr(ve_3, ve_2)  # shape [B]

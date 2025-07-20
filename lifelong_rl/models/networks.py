@@ -426,7 +426,7 @@ class ParallelizedEnsembleFlattenMLP(nn.Module):
             # print("self.window", self.window)
         if slide_updata:
             self.window = self.updata_window(self.window, self.ensemble_size, self.win_step)
-            # print(self.window)
+        # print(self.window)
             # exit()
         return q_samples_list, window
 
