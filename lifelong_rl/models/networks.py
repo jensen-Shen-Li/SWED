@@ -466,6 +466,8 @@ class ParallelizedEnsembleFlattenMLP(nn.Module):
         # else:
         #     raise NotImplementedError
         # # return torch.min(preds[:2], dim=0)[0]
+        # print(sli_b)
+        # exit()
         return torch.min(preds[-sli_b:], dim=0)[0]
 
     def fit_input_stats(self, data, mask=None):
